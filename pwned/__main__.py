@@ -15,6 +15,7 @@ def request_debug(req):
     fmt = "{req.method} {req.full_url} {req.headers!r}"
     logging.debug("HTTP request: %s", fmt.format(req=req))
 
+
 def reader(*names):
     if len(names) == 0:
         names = ['-']
@@ -37,13 +38,14 @@ def flatten(*items):
 def abbreviate(text):
     return text[0:3] + '...' + text[len(text) - 3:]
 
+
 def checkpasswords(names, hashed=False):
     print("# Checking provided password lists for compromises...")
     with reader(*names) as r:
         for i, line in enumerate(r):
             line = line.strip()  # ignore surrounding whitespace
             try:
-                status = pwned.checkpassword(line, hash=(not hashed))
+                status = pwned.count_password_breaches(line, hash=(not hashed))
             except pwned.HTTPError as e:
                 logging.error(e)
                 request_debug(e.request)
@@ -54,6 +56,9 @@ def checkpasswords(names, hashed=False):
                 ))
 
 
+def format_breach(email: str, pos: int, breach: pwned.BreachModel) -> str:
+    return "{email} was compromised on {b.date}".format(b=breach, email=email)
+
 def checkemails(names):
     print("# Checking provided email lists for compromised accounts...")
     with reader(*names) as r:
@@ -61,12 +66,12 @@ def checkemails(names):
             line = line.strip()  # ignore surrounding whitespace
             try:
                 print("# checking [%s]" % (line,))
-                status = pwned.checkemail(line)
-                print(line + " >> " + repr(status))
+                breaches = pwned.get_email_breaches(line)
+                for breach in pwned.breaches_as_objects(breaches):
+                    print(format_breach(line, i, breach))
             except pwned.HTTPError as e:
                 logging.error(e)
                 request_debug(e.request)
-
 
 
 

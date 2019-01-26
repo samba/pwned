@@ -6,6 +6,8 @@ import time
 import pprint
 import json
 import random
+import datetime
+import typing
 
 from urllib import request
 from urllib.request import quote
@@ -14,8 +16,8 @@ from urllib.error import URLError, HTTPError
 ACCOUNT_API_BASE = "https://haveibeenpwned.com/api/v2/{service}/{parameter}"
 PASSWORD_API_BASE = "https://api.pwnedpasswords.com/range/{hash5}"
 
-# AGENT_STRING = "pwnedcli/v1; python/3; (https://github.com/samba)"
-AGENT_STRING = "curl/7.54.0"
+AGENT_STRING = "pwnedcli/v1; python/3; (https://github.com/samba)"
+# AGENT_STRING = "curl/7.54.0"
 
 ACCOUNT_SERVICES_VALID = [
     'breachedaccount',
@@ -23,6 +25,7 @@ ACCOUNT_SERVICES_VALID = [
     'breach',
     'pasteaccount'
 ]
+
 
 class CaseSensitiveHeader(object):
     """
@@ -43,6 +46,52 @@ class CaseSensitiveHeader(object):
 
     def title(self):
         return '' + self.text
+
+
+class BreachModel(object):
+
+    def __init__(self, breachdata: dict):
+        self.data = breachdata
+
+    @property
+    def name(self) -> str:
+        return self.data.get('Name', None)
+    
+    @property
+    def title(self) -> str:
+        return self.data.get('Title', None)
+
+    @property
+    def date_breached(self) -> datetime.date:
+        return self.data.get('BreachDate', None)
+
+    @property
+    def date_added(self) -> datetime.date:
+        return self.data.get('AddedDate', None)
+
+    @property
+    def date_modified(self) -> datetime.date:
+        return self.data.get('ModifiedDate', None)
+
+    @property
+    def domain(self) -> str:
+        return self.data.get('Domain', None)
+
+    @property
+    def verified(self) -> bool:
+        return self.data.get('IsVerified', None)
+    
+    @property
+    def sensitive(self) -> bool:
+        return self.data.get('IsSensitive', None)
+    
+    @property
+    def spamlist(self) -> bool:
+        return self.data.get('IsSpamList', None)
+
+    @property
+    def dataclasses(self) -> typing.List[str]:
+        return self.data.get('DataClasses')
 
 
 class ServiceLock(object):
@@ -93,6 +142,7 @@ def URL(service, parameter, **params) -> str:
     else:
         raise KeyError("Unrecognized API service type: %s" % (service))
 
+
 def gethostname(url: str) -> str:
     return urllib.parse.urlparse(url).hostname
     
@@ -127,18 +177,25 @@ def fetch(url: str, accept=None, **params):
                 raise inject_request_error(e, req)
         except URLError as u:
             raise inject_request_error(u, req)
-    
+
+
 def body(response) -> bytes:
     return response.read().decode('utf-8')
 
-def checkemail(address: str):
+
+def get_email_breaches(address: str):
     ServiceLock.get('breachedaccount').wait()  # wait for API cooldown
     data = fetch(URL('breachedaccount', quote(address)))
     data = json.loads(body(data))
     return data
 
 
-def checkpassword(passwd: str, hash=True) -> int:
+def breaches_as_objects(data: typing.List[dict]):
+    for breach in data:
+        yield BreachModel(breach)
+
+
+def count_password_breaches(passwd: str, hash=True) -> int:
     ServiceLock.get('passhash').wait()  # wait for API cooldown (maybe)
     if hash:
         if isinstance(passwd, str):
